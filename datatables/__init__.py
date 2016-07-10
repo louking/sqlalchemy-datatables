@@ -51,8 +51,27 @@ def clean_regex(regex):
     :type regex: str
     :rtype: str with regex to use with database
     '''
+    
+    # if not string, just return original regex (https://github.com/Pegase745/sqlalchemy-datatables/issues/51)
+    if not isinstance(regex, (str, unicode)):
+        return regex
+
     # copy for return
     ret_regex = regex
+
+    # handle "exact" filter_match_mode case (see yadcf), which is made of ^( beginning and )$ end anchors
+    beganchor = False
+    endanchor = False
+    parens    = False
+    if len(ret_regex) >= 1 and ret_regex[0] == '^':
+        ret_regex = ret_regex[1:]
+        beganchor = True
+    if len(ret_regex) >= 1 and ret_regex[-1:] == '$':
+        ret_regex = ret_regex[:-1]
+        endanchor = True
+    if len(ret_regex) >= 1 and ret_regex[0] == '(' and ret_regex[-1] == ')':
+        ret_regex = ret_regex[1:-1]
+        parens = True
 
     # these characters are escaped (all except alternation | and escape \)
     # see http://www.regular-expressions.info/refquick.html
@@ -74,11 +93,22 @@ def clean_regex(regex):
         ret_regex = ret_regex.replace('||', '|')
         if old_regex == ret_regex: break
 
-    # if last char is alternation | remove it because this 
+    # if first char or last char is alternation | remove it because this 
     # will cause operational error
     # this can happen as user is typing in global search box
+    # have also seen yadcf send initial char as alternation in some cases
+    while len(ret_regex) >= 1 and ret_regex[0] == '|':
+        ret_regex = ret_regex[1:]
     while len(ret_regex) >= 1 and ret_regex[-1] == '|':
         ret_regex = ret_regex[:-1]
+
+    # restore parens and beginning, end anchors if necessary
+    if parens:
+        ret_regex = '(' + ret_regex + ')'
+    if beganchor:
+        ret_regex = '^' + ret_regex
+    if endanchor:
+        ret_regex = ret_regex + '$'
 
     # and back to the caller
     return ret_regex
