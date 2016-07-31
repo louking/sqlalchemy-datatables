@@ -498,5 +498,5 @@ class DataTables:
             pages.start = int(self.request_values[displayStart])
             pages.length = int(self.request_values[displayLength])
 
-        offset = pages.start + pages.length
-        self.query = self.query.slice(pages.start, offset)
+            offset = pages.start + pages.length
+            self.query = self.query.slice(pages.start, offset)
