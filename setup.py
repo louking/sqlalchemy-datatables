@@ -2,7 +2,7 @@
 from setuptools import setup
 
 
-__VERSION__ = '0.4.1lk'
+__VERSION__ = '0.4.1lk3'
 
 
 setup(

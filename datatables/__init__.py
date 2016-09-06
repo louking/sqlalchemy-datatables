@@ -11,6 +11,10 @@ from sqlalchemy import String
 from collections import namedtuple
 from logging import getLogger
 
+import re
+checkfloat = re.compile('^(?:\d*\.){1}\d+$').match
+checkint = re.compile('^\d+$').match
+
 log = getLogger(__file__)
 
 if sys.version_info > (3, 0):
@@ -112,6 +116,44 @@ def clean_regex(regex):
 
     # and back to the caller
     return ret_regex
+
+def getrangefilter(value):
+    # only check strings
+    if not isinstance(value, (str, unicode)):
+        return value
+
+    # tailored for use with yadcf, but possible that delim could be
+    # configured for use with other datatables filtering add-ons
+    delim = '-yadcf_delim-'
+    thisrange = value.split(delim)
+
+    # range can only be two values min, max
+    if len(thisrange) > 2:
+        raise ValueError('invalid value `%s`: too many range delimiters' % value)
+
+    # no delimiter, return the original value
+    elif len(thisrange) < 2:
+        return value
+
+    # it is possible only delimiter is present
+    # this is like empty string
+    elif thisrange == ['','']:
+        return ''
+
+    # found a from, to range. try to convert items from string
+    else:
+        # try to convert to int, float, bool
+        for i in range(2):
+            if checkint(thisrange[i]):
+                thisrange[i] = int(thisrange[i])
+            elif checkfloat(thisrange[i]):
+                thisrange[i] = float(thisrange[i])
+            else:
+                booltbl = {'true':True, 'True':True, 'false':False, 'False':False}
+                if thisrange[i] in booltbl:
+                    thisrange[i] = booltbl[thisrange[i]]
+
+        return thisrange
 
 class InvalidParameter(Exception):
 
@@ -374,19 +416,30 @@ class DataTables:
             if search_value2:
                 sqla_obj, column_name = search(idx, col)
 
-                # regex takes precedence over search_like
+                # maybe there is a range or regex
+                search_value2 = getrangefilter(search_value2)
                 regex = clean_regex(search_value2)
-                if (self.request_values.get(searchableColumnRegex % idx) 
+
+                # range takes highest precedence
+                # then regex takes precedence over search_like
+                if type(search_value2) == list:
+                    conditions.append(cast(
+                        get_attr(sqla_obj, column_name), String)
+                        .between(search_value2[0], search_value2[1]))
+
+                elif (self.request_values.get(searchableColumnRegex % idx) 
                             in ( True, 'true') and
                             self.dialect in REGEX_OP and 
                             len(regex) >= 1):
                     conditions.append(cast(
                         get_attr(sqla_obj, column_name), String)
                         .op(REGEX_OP[self.dialect])(regex))
+                
                 elif col.search_like:
                     conditions.append(cast(
                         get_attr(sqla_obj, column_name), String)
                         .ilike('%%%s%%' % search_value2))
+                
                 else:
                     conditions.append(cast(
                         get_attr(sqla_obj, column_name), String)
